@@ -1,0 +1,39 @@
+application:
+  actions: actions
+  web: web-src
+  runtimeManifest:
+    packages:
+      KahootMongoApp:
+        license: Apache-2.0
+        actions:
+          addGame:
+            function: actions/addGame/index.js
+            web: 'yes'
+            runtime: nodejs:22
+            inputs:
+              LOG_LEVEL: debug
+              apiKey: $SERVICE_API_KEY
+              ATLAS_URI: $ATLAS_URI
+            annotations:
+              require-adobe-auth: false
+              final: true
+          addQuestion:
+            function: actions/addQuestion/index.js
+            web: 'yes'
+            runtime: nodejs:22
+            inputs:
+              LOG_LEVEL: debug
+              ATLAS_URI: $ATLAS_URI
+            annotations:
+              require-adobe-auth: false
+              final: true
+          getGameByID:
+            function: actions/getGameByID/index.js
+            web: 'yes'
+            runtime: nodejs:22
+            inputs:
+              LOG_LEVEL: debug
+              ATLAS_URI: $ATLAS_URI
+            annotations:
+              require-adobe-auth: false
+              final: true
