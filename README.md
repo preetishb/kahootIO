@@ -163,8 +163,8 @@ npm install
 
 3. Set up environment variables:
 ```bash
-# Set your MongoDB Atlas URI
-export ATLAS_URI="mongodb+srv://username:password@cluster.mongodb.net/"
+# Set your MongoDB Atlas URI (replace with your actual credentials)
+export ATLAS_URI="mongodb+srv://<username>:<password>@<cluster>.mongodb.net/<database>"
 ```
 
 ### Deployment
