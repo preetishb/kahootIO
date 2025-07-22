@@ -60,9 +60,10 @@ async function main(params) {
       parsedParams.title,
       parsedParams.description,
       parsedParams.tags,
-      parsedParams.publishStatus,
+      parsedParams.status,
       parsedParams.startDate,
       parsedParams.endDate,
+      parsedParams.questions,
       client
     ).catch(console.dir);
     
@@ -88,7 +89,7 @@ async function main(params) {
   }
 }
 
-async function run(_id, title, description, tags, publishStatus, startDate, endDate, client) {
+async function run(_id, title, description, tags, status, startDate, endDate, questions, client) {
   try {
     console.log("inside add game");
     // Connect the client to the server (optional starting in v4.7)
@@ -132,28 +133,110 @@ async function run(_id, title, description, tags, publishStatus, startDate, endD
       throw new Error("Start date must be before end date");
     }
 
+    // Handle questions validation if provided
+    let validatedQuestions = [];
+    if (questions !== undefined && questions !== null) {
+      if (!Array.isArray(questions)) {
+        throw new Error('Questions must be an array');
+      }
+
+      // Validate questions structure
+      for (const question of questions) {
+        if (!question.questionId || !question.questionType || !question.questionText || !question.options || !question.correctAnswer) {
+          throw new Error('Each question must have questionId, questionType, questionText, options, and correctAnswer');
+        }
+        
+        if (!Array.isArray(question.options)) {
+          throw new Error('Options must be an array');
+        }
+        
+        // Validate timeLimit if provided
+        if (question.timeLimit !== undefined && question.timeLimit !== null) {
+          const timeLimitNum = Number(question.timeLimit);
+          if (isNaN(timeLimitNum) || timeLimitNum <= 0) {
+            throw new Error(`Question "${question.questionId}" has invalid timeLimit. Time limit must be a positive number (in seconds)`);
+          }
+        }
+        
+        // Validate correctAnswer based on question type
+        if (question.questionType === 'single-choice') {
+          // For single-choice, correctAnswer should be a string
+          if (typeof question.correctAnswer !== 'string') {
+            throw new Error(`For single-choice questions, correctAnswer must be a string, got: ${typeof question.correctAnswer}`);
+          }
+          if (!question.options.includes(question.correctAnswer)) {
+            throw new Error(`Correct answer "${question.correctAnswer}" must be one of the provided options`);
+          }
+        } else if (question.questionType === 'multiple-choice') {
+          // For multiple-choice, correctAnswer should be an array
+          if (!Array.isArray(question.correctAnswer)) {
+            throw new Error(`For multiple-choice questions, correctAnswer must be an array, got: ${typeof question.correctAnswer}`);
+          }
+          if (question.correctAnswer.length === 0) {
+            throw new Error('Multiple-choice questions must have at least one correct answer');
+          }
+          // Check that all correct answers are in the options
+          for (const correctAns of question.correctAnswer) {
+            if (!question.options.includes(correctAns)) {
+              throw new Error(`Correct answer "${correctAns}" must be one of the provided options`);
+            }
+          }
+        } else {
+          // For other question types, accept both string and array
+          if (typeof question.correctAnswer === 'string') {
+            if (!question.options.includes(question.correctAnswer)) {
+              throw new Error(`Correct answer "${question.correctAnswer}" must be one of the provided options`);
+            }
+          } else if (Array.isArray(question.correctAnswer)) {
+            if (question.correctAnswer.length === 0) {
+              throw new Error('Question must have at least one correct answer');
+            }
+            for (const correctAns of question.correctAnswer) {
+              if (!question.options.includes(correctAns)) {
+                throw new Error(`Correct answer "${correctAns}" must be one of the provided options`);
+              }
+            }
+          } else {
+            throw new Error(`correctAnswer must be either a string or an array, got: ${typeof question.correctAnswer}`);
+          }
+        }
+      }
+
+      validatedQuestions = questions;
+    }
+
     // Add a record to the "games" collection
     const doc = {
       _id: gameId,
       title: title,
       description: description,
       tags: parsedTags,
-      publishStatus: publishStatus === true || publishStatus === 'true',
+      status: status === true || status === 'true',
       startDate: startDateObj,
       endDate: endDateObj,
+      questions: validatedQuestions,
       createdAt: new Date(),
       updatedAt: new Date()
     };
     
     const result = await collection.insertOne(doc);
     
-    return {
+    // Prepare response with question information if questions were provided
+    const response = {
       success: true,
       message: "Game created successfully",
       _id: gameId,
       insertedId: result.insertedId,
       game: doc
     };
+
+    // Add questions-specific information if questions were provided
+    if (questions !== undefined && questions !== null && questions.length > 0) {
+      response.questionsCount = questions.length;
+      response.questionIds = questions.map(q => q.questionId);
+    }
+    
+    return response;
   } catch (error) {
     console.error("Error in run function:", error);
     throw error;

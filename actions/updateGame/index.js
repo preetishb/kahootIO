@@ -51,7 +51,7 @@ async function main(params) {
       parsedParams.title,
       parsedParams.description,
       parsedParams.tags,
-      parsedParams.publishStatus,
+      parsedParams.status,
       parsedParams.startDate,
       parsedParams.endDate,
       parsedParams.questions,
@@ -80,7 +80,7 @@ async function main(params) {
   }
 }
 
-async function run(_id, title, description, tags, publishStatus, startDate, endDate, questions, client) {
+async function run(_id, title, description, tags, status, startDate, endDate, questions, client) {
   try {
     console.log("inside update game");
     // Connect the client to the server (optional starting in v4.7)
@@ -125,8 +125,8 @@ async function run(_id, title, description, tags, publishStatus, startDate, endD
       updateDoc.tags = parsedTags;
     }
 
-    if (publishStatus !== undefined && publishStatus !== null) {
-      updateDoc.publishStatus = publishStatus === true || publishStatus === 'true';
+    if (status !== undefined && status !== null) {
+      updateDoc.status = status === true || status === 'true';
     }
 
     // Handle questions updates with validation (similar to addQuestion action)
