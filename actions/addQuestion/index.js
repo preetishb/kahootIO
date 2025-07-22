@@ -87,48 +87,114 @@ async function run(params, client, logger) {
 
     // Validate questions structure
     for (const question of params.questions) {
-      if (!question.questionId || !question.questionType || !question.questionText || !question.options || !question.correctAnswer) {
-        throw new Error('Each question must have questionId, questionType, questionText, options, and correctAnswer');
+      if (!question.questionId || !question.questionType || !question.questionText || !question.options) {
+        throw new Error('Each question must have questionId, questionType, questionText, and options');
       }
       
       if (!Array.isArray(question.options)) {
         throw new Error('Options must be an array');
       }
-      
-      if (question.questionType === 'single-choice' && !question.options.includes(question.correctAnswer)) {
-        throw new Error(`Correct answer "${question.correctAnswer}" must be one of the provided options`);
+
+      // Validate correctAnswers (required)
+      if (!question.correctAnswers) {
+        throw new Error('Each question must have correctAnswers');
+      }
+
+      if (!Array.isArray(question.correctAnswers)) {
+        throw new Error(`correctAnswers must be an array for question ${question.questionId}`);
+      }
+
+      if (question.correctAnswers.length === 0) {
+        throw new Error(`correctAnswers cannot be empty for question ${question.questionId}`);
+      }
+
+      for (const answerIndex of question.correctAnswers) {
+        if (!Number.isInteger(answerIndex) || answerIndex < 0 || answerIndex >= question.options.length) {
+          throw new Error(`Invalid correctAnswers index ${answerIndex} for question ${question.questionId}`);
+        }
+      }
+
+      // Validate timeLimit if provided
+      if (question.timeLimit !== undefined && question.timeLimit !== null) {
+        if (!Number.isInteger(question.timeLimit) || question.timeLimit <= 0) {
+          throw new Error(`timeLimit must be a positive integer for question ${question.questionId}`);
+        }
       }
     }
 
-    // Prepare the game document for upsert
-    const gameDocument = {
-      _id: params._id,
-      name: params.name,
-      questions: params.questions,
-      updatedAt: new Date()
-    };
-
-    // If createdAt is not provided, add it for new documents
-    if (!params.createdAt) {
-      gameDocument.createdAt = new Date();
+    // Check if game exists, if not create it
+    let existingGame = await gameCollection.findOne({ _id: params._id });
+    
+    if (!existingGame) {
+      // Create new game
+      existingGame = {
+        _id: params._id,
+        name: params.name || `Game ${params._id}`,
+        questions: [],
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
     }
 
-    // Use upsert to either update existing game or create new one
-    const result = await gameCollection.replaceOne(
+    // Get existing questions or initialize empty array
+    const existingQuestions = existingGame.questions || [];
+    
+    // Track operations for response
+    let addedQuestions = [];
+    let updatedQuestions = [];
+    
+    // Process each incoming question
+    let updatedQuestionsArray = [...existingQuestions];
+    
+    for (const incomingQuestion of params.questions) {
+      const existingQuestionIndex = updatedQuestionsArray.findIndex(
+        q => q.questionId === incomingQuestion.questionId
+      );
+      
+      // Add timestamps to question
+      const questionToSave = {
+        ...incomingQuestion,
+        updatedAt: new Date()
+      };
+      
+      if (existingQuestionIndex !== -1) {
+        // Update existing question
+        questionToSave.createdAt = updatedQuestionsArray[existingQuestionIndex].createdAt || new Date();
+        updatedQuestionsArray[existingQuestionIndex] = questionToSave;
+        updatedQuestions.push(incomingQuestion.questionId);
+      } else {
+        // Add new question
+        questionToSave.createdAt = new Date();
+        updatedQuestionsArray.push(questionToSave);
+        addedQuestions.push(incomingQuestion.questionId);
+      }
+    }
+
+    // Update the game document
+    const result = await gameCollection.updateOne(
       { _id: params._id },
-      gameDocument,
+      { 
+        $set: { 
+          questions: updatedQuestionsArray,
+          updatedAt: new Date(),
+          ...(params.name && { name: params.name })
+        }
+      },
       { upsert: true }
     );
 
-    logger.info(`Game ${params._id} updated with ${params.questions.length} questions`);
+    logger.info(`Game ${params._id} updated. Added: ${addedQuestions.length}, Updated: ${updatedQuestions.length} questions`);
 
     return {
       success: true,
-      message: `Successfully updated game ${params._id} with ${params.questions.length} question(s)`,
+      message: `Successfully processed ${params.questions.length} question(s) for game ${params._id}`,
       gameId: params._id,
-      questionsCount: params.questions.length,
-      questionIds: params.questions.map(q => q.questionId),
-      operation: result.upsertedCount > 0 ? 'created' : 'updated'
+      totalQuestions: updatedQuestionsArray.length,
+      addedQuestions: addedQuestions,
+      updatedQuestions: updatedQuestions,
+      addedCount: addedQuestions.length,
+      updatedCount: updatedQuestions.length,
+      operation: result.upsertedCount > 0 ? 'game_created' : 'game_updated'
     };
 
   } finally {

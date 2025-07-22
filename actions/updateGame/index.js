@@ -155,44 +155,60 @@ async function run(_id, title, description, tags, status, startDate, endDate, qu
         
         // Validate correctAnswer based on question type
         if (question.questionType === 'single-choice') {
-          // For single-choice, correctAnswer should be a string
-          if (typeof question.correctAnswer !== 'string') {
-            throw new Error(`For single-choice questions, correctAnswer must be a string, got: ${typeof question.correctAnswer}`);
+          // For single-choice, correctAnswer should be an integer (index)
+          if (!Number.isInteger(question.correctAnswer)) {
+            throw new Error(`For single-choice questions, correctAnswer must be an integer index, got: ${typeof question.correctAnswer}`);
           }
-          if (!question.options.includes(question.correctAnswer)) {
-            throw new Error(`Correct answer "${question.correctAnswer}" must be one of the provided options`);
+          if (question.correctAnswer < 0 || question.correctAnswer >= question.options.length) {
+            throw new Error(`Correct answer index ${question.correctAnswer} is out of range. Must be between 0 and ${question.options.length - 1}`);
           }
         } else if (question.questionType === 'multiple-choice') {
-          // For multiple-choice, correctAnswer should be an array
+          // For multiple-choice, correctAnswer should be an array of integers
           if (!Array.isArray(question.correctAnswer)) {
-            throw new Error(`For multiple-choice questions, correctAnswer must be an array, got: ${typeof question.correctAnswer}`);
+            throw new Error(`For multiple-choice questions, correctAnswer must be an array of integers, got: ${typeof question.correctAnswer}`);
           }
           if (question.correctAnswer.length === 0) {
             throw new Error('Multiple-choice questions must have at least one correct answer');
           }
-          // Check that all correct answers are in the options
-          for (const correctAns of question.correctAnswer) {
-            if (!question.options.includes(correctAns)) {
-              throw new Error(`Correct answer "${correctAns}" must be one of the provided options`);
+          // Check that all correct answer indices are valid
+          for (const correctIndex of question.correctAnswer) {
+            if (!Number.isInteger(correctIndex)) {
+              throw new Error(`All correct answer indices must be integers, got: ${typeof correctIndex}`);
+            }
+            if (correctIndex < 0 || correctIndex >= question.options.length) {
+              throw new Error(`Correct answer index ${correctIndex} is out of range. Must be between 0 and ${question.options.length - 1}`);
             }
           }
+          // Check for duplicate indices
+          const uniqueIndices = [...new Set(question.correctAnswer)];
+          if (uniqueIndices.length !== question.correctAnswer.length) {
+            throw new Error('Correct answer indices cannot contain duplicates');
+          }
         } else {
-          // For other question types, accept both string and array
-          if (typeof question.correctAnswer === 'string') {
-            if (!question.options.includes(question.correctAnswer)) {
-              throw new Error(`Correct answer "${question.correctAnswer}" must be one of the provided options`);
+          // For other question types, accept both integer and array of integers
+          if (Number.isInteger(question.correctAnswer)) {
+            if (question.correctAnswer < 0 || question.correctAnswer >= question.options.length) {
+              throw new Error(`Correct answer index ${question.correctAnswer} is out of range. Must be between 0 and ${question.options.length - 1}`);
             }
           } else if (Array.isArray(question.correctAnswer)) {
             if (question.correctAnswer.length === 0) {
               throw new Error('Question must have at least one correct answer');
             }
-            for (const correctAns of question.correctAnswer) {
-              if (!question.options.includes(correctAns)) {
-                throw new Error(`Correct answer "${correctAns}" must be one of the provided options`);
+            for (const correctIndex of question.correctAnswer) {
+              if (!Number.isInteger(correctIndex)) {
+                throw new Error(`All correct answer indices must be integers, got: ${typeof correctIndex}`);
+              }
+              if (correctIndex < 0 || correctIndex >= question.options.length) {
+                throw new Error(`Correct answer index ${correctIndex} is out of range. Must be between 0 and ${question.options.length - 1}`);
               }
             }
+            // Check for duplicate indices
+            const uniqueIndices = [...new Set(question.correctAnswer)];
+            if (uniqueIndices.length !== question.correctAnswer.length) {
+              throw new Error('Correct answer indices cannot contain duplicates');
+            }
           } else {
-            throw new Error(`correctAnswer must be either a string or an array, got: ${typeof question.correctAnswer}`);
+            throw new Error(`correctAnswer must be either an integer or an array of integers, got: ${typeof question.correctAnswer}`);
           }
         }
       }
