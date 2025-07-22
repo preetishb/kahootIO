@@ -37,3 +37,23 @@ application:
             annotations:
               require-adobe-auth: false
               final: true
+          getAllGames:
+            function: actions/getAllGames/index.js
+            web: 'yes'
+            runtime: nodejs:22
+            inputs:
+              LOG_LEVEL: debug
+              ATLAS_URI: $ATLAS_URI
+            annotations:
+              require-adobe-auth: false
+              final: true
+          updateGame:
+            function: actions/updateGame/index.js
+            web: 'yes'
+            runtime: nodejs:22
+            inputs:
+              LOG_LEVEL: debug
+              ATLAS_URI: $ATLAS_URI
+            annotations:
+              require-adobe-auth: false
+              final: true

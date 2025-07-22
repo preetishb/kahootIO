@@ -21,6 +21,13 @@ const { MongoClient, ServerApiVersion } = require("mongodb");
 //require('dotenv').config();
 //const passwordAtlas = process.env.PASSWORD_ATLAS;
 
+// Function to generate unique game ID
+function generateGameId() {
+  const timestamp = Date.now().toString(36);
+  const randomStr = Math.random().toString(36).substr(2, 9);
+  return `game_${timestamp}${randomStr}`;
+}
+
 // main function that will be executed by Adobe I/O Runtime
 async function main(params) {
   // create a Logger
@@ -36,6 +43,7 @@ async function main(params) {
       deprecationErrors: true,
     },
   });
+  
   try {
     // 'info' is the default level if not set
     logger.info("Calling the main action in add game");
@@ -43,12 +51,21 @@ async function main(params) {
     // log parameters, only if params.LOG_LEVEL === 'debug'
     logger.debug(stringParameters(params));
 
+    
+
     // Parse the JSON string back into an object
     const parsedParams = JSON.parse(stringParameters(params));
     const content = await run(
-      parsedParams.name,
+      parsedParams._id,
+      parsedParams.title,
+      parsedParams.description,
+      parsedParams.tags,
+      parsedParams.publishStatus,
+      parsedParams.startDate,
+      parsedParams.endDate,
       client
     ).catch(console.dir);
+    
     const response = {
       statusCode: 200,
       body: content,
@@ -58,10 +75,20 @@ async function main(params) {
   } catch (error) {
     // log any server errors
     logger.error(error);
+    return {
+      statusCode: 500,
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        success: false,
+        error: 'Internal server error'
+      })
+    };
   }
 }
 
-async function run(name, client) {
+async function run(_id, title, description, tags, publishStatus, startDate, endDate, client) {
   try {
     console.log("inside add game");
     // Connect the client to the server (optional starting in v4.7)
@@ -69,18 +96,67 @@ async function run(name, client) {
     const database = client.db("gameDb");
     const collection = database.collection("gameCollection");
 
-    // Check if the name already exists
-    const existingGame = await collection.findOne({ name: name });
+    // Use provided _id or generate unique game ID
+    const gameId = _id || generateGameId();
+
+    // Check if the _id already exists
+    const existingGame = await collection.findOne({ _id: gameId });
     if (existingGame) {
-      throw new Error("Game already exists");
+      throw new Error("Game with this ID already exists");
+    }
+
+    // Check if the title already exists (optional additional check)
+    const existingTitle = await collection.findOne({ title: title });
+    if (existingTitle) {
+      throw new Error("Game with this title already exists");
+    }
+
+    // Handle tags as array
+    let parsedTags = [];
+    if (tags && Array.isArray(tags)) {
+      parsedTags = tags.filter(tag => tag && tag.trim().length > 0);
+    } else if (tags && typeof tags === 'string') {
+      // Fallback: handle single tag as string
+      parsedTags = [tags.trim()];
+    }
+
+    // Validate date format and convert to Date objects
+    const startDateObj = new Date(startDate);
+    const endDateObj = new Date(endDate);
+    
+    if (isNaN(startDateObj.getTime()) || isNaN(endDateObj.getTime())) {
+      throw new Error("Invalid date format. Please use a valid date format.");
+    }
+    
+    if (startDateObj >= endDateObj) {
+      throw new Error("Start date must be before end date");
     }
 
     // Add a record to the "games" collection
     const doc = {
-      name: name
+      _id: gameId,
+      title: title,
+      description: description,
+      tags: parsedTags,
+      publishStatus: publishStatus === true || publishStatus === 'true',
+      startDate: startDateObj,
+      endDate: endDateObj,
+      createdAt: new Date(),
+      updatedAt: new Date()
     };
+    
     const result = await collection.insertOne(doc);
-    return result;
+    
+    return {
+      success: true,
+      message: "Game created successfully",
+      _id: gameId,
+      insertedId: result.insertedId,
+      game: doc
+    };
+  } catch (error) {
+    console.error("Error in run function:", error);
+    throw error;
   } finally {
     // Ensures that the client will close when you finish/error
     await client.close();
