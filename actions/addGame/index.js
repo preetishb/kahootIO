@@ -227,7 +227,7 @@ async function run(_id, title, description, tags, status, startDate, endDate, qu
       title: title,
       description: description,
       tags: parsedTags,
-      status: status === true || status === 'true',
+      status: status,
       startDate: startDateObj,
       endDate: endDateObj,
       questions: validatedQuestions,

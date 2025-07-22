@@ -126,10 +126,13 @@ async function run(_id, title, description, tags, status, startDate, endDate, qu
     }
 
     if (status !== undefined && status !== null) {
-      updateDoc.status = status === true || status === 'true';
+      updateDoc.status = status;
     }
 
     // Handle questions updates with validation (similar to addQuestion action)
+    let addedQuestions = [];
+    let updatedQuestions = [];
+    
     if (questions !== undefined && questions !== null) {
       if (!Array.isArray(questions)) {
         throw new Error('Questions must be an array');
@@ -137,83 +140,72 @@ async function run(_id, title, description, tags, status, startDate, endDate, qu
 
       // Validate questions structure
       for (const question of questions) {
-        if (!question.questionId || !question.questionType || !question.questionText || !question.options || !question.correctAnswer) {
-          throw new Error('Each question must have questionId, questionType, questionText, options, and correctAnswer');
+        if (!question.questionId || !question.questionType || !question.questionText || !question.options) {
+          throw new Error('Each question must have questionId, questionType, questionText, and options');
         }
         
         if (!Array.isArray(question.options)) {
           throw new Error('Options must be an array');
         }
-        
-        // Validate timeLimit if provided
-        if (question.timeLimit !== undefined && question.timeLimit !== null) {
-          const timeLimitNum = Number(question.timeLimit);
-          if (isNaN(timeLimitNum) || timeLimitNum <= 0) {
-            throw new Error(`Question "${question.questionId}" has invalid timeLimit. Time limit must be a positive number (in seconds)`);
+
+        // Validate correctAnswers (required)
+        if (!question.correctAnswers) {
+          throw new Error('Each question must have correctAnswers');
+        }
+
+        if (!Array.isArray(question.correctAnswers)) {
+          throw new Error(`correctAnswers must be an array for question ${question.questionId}`);
+        }
+
+        if (question.correctAnswers.length === 0) {
+          throw new Error(`correctAnswers cannot be empty for question ${question.questionId}`);
+        }
+
+        for (const answerIndex of question.correctAnswers) {
+          if (!Number.isInteger(answerIndex) || answerIndex < 0 || answerIndex >= question.options.length) {
+            throw new Error(`Invalid correctAnswers index ${answerIndex} for question ${question.questionId}`);
           }
         }
-        
-        // Validate correctAnswer based on question type
-        if (question.questionType === 'single-choice') {
-          // For single-choice, correctAnswer should be an integer (index)
-          if (!Number.isInteger(question.correctAnswer)) {
-            throw new Error(`For single-choice questions, correctAnswer must be an integer index, got: ${typeof question.correctAnswer}`);
-          }
-          if (question.correctAnswer < 0 || question.correctAnswer >= question.options.length) {
-            throw new Error(`Correct answer index ${question.correctAnswer} is out of range. Must be between 0 and ${question.options.length - 1}`);
-          }
-        } else if (question.questionType === 'multiple-choice') {
-          // For multiple-choice, correctAnswer should be an array of integers
-          if (!Array.isArray(question.correctAnswer)) {
-            throw new Error(`For multiple-choice questions, correctAnswer must be an array of integers, got: ${typeof question.correctAnswer}`);
-          }
-          if (question.correctAnswer.length === 0) {
-            throw new Error('Multiple-choice questions must have at least one correct answer');
-          }
-          // Check that all correct answer indices are valid
-          for (const correctIndex of question.correctAnswer) {
-            if (!Number.isInteger(correctIndex)) {
-              throw new Error(`All correct answer indices must be integers, got: ${typeof correctIndex}`);
-            }
-            if (correctIndex < 0 || correctIndex >= question.options.length) {
-              throw new Error(`Correct answer index ${correctIndex} is out of range. Must be between 0 and ${question.options.length - 1}`);
-            }
-          }
-          // Check for duplicate indices
-          const uniqueIndices = [...new Set(question.correctAnswer)];
-          if (uniqueIndices.length !== question.correctAnswer.length) {
-            throw new Error('Correct answer indices cannot contain duplicates');
-          }
-        } else {
-          // For other question types, accept both integer and array of integers
-          if (Number.isInteger(question.correctAnswer)) {
-            if (question.correctAnswer < 0 || question.correctAnswer >= question.options.length) {
-              throw new Error(`Correct answer index ${question.correctAnswer} is out of range. Must be between 0 and ${question.options.length - 1}`);
-            }
-          } else if (Array.isArray(question.correctAnswer)) {
-            if (question.correctAnswer.length === 0) {
-              throw new Error('Question must have at least one correct answer');
-            }
-            for (const correctIndex of question.correctAnswer) {
-              if (!Number.isInteger(correctIndex)) {
-                throw new Error(`All correct answer indices must be integers, got: ${typeof correctIndex}`);
-              }
-              if (correctIndex < 0 || correctIndex >= question.options.length) {
-                throw new Error(`Correct answer index ${correctIndex} is out of range. Must be between 0 and ${question.options.length - 1}`);
-              }
-            }
-            // Check for duplicate indices
-            const uniqueIndices = [...new Set(question.correctAnswer)];
-            if (uniqueIndices.length !== question.correctAnswer.length) {
-              throw new Error('Correct answer indices cannot contain duplicates');
-            }
-          } else {
-            throw new Error(`correctAnswer must be either an integer or an array of integers, got: ${typeof question.correctAnswer}`);
+
+        // Validate timeLimit if provided
+        if (question.timeLimit !== undefined && question.timeLimit !== null) {
+          if (!Number.isInteger(question.timeLimit) || question.timeLimit <= 0) {
+            throw new Error(`timeLimit must be a positive integer for question ${question.questionId}`);
           }
         }
       }
 
-      updateDoc.questions = questions;
+      // Get existing questions or initialize empty array
+      const existingQuestions = existingGame.questions || [];
+      
+      // Process each incoming question
+      let updatedQuestionsArray = [...existingQuestions];
+      
+      for (const incomingQuestion of questions) {
+        const existingQuestionIndex = updatedQuestionsArray.findIndex(
+          q => q.questionId === incomingQuestion.questionId
+        );
+        
+        // Add timestamps to question
+        const questionToSave = {
+          ...incomingQuestion,
+          updatedAt: new Date()
+        };
+        
+        if (existingQuestionIndex !== -1) {
+          // Update existing question
+          questionToSave.createdAt = updatedQuestionsArray[existingQuestionIndex].createdAt || new Date();
+          updatedQuestionsArray[existingQuestionIndex] = questionToSave;
+          updatedQuestions.push(incomingQuestion.questionId);
+        } else {
+          // Add new question
+          questionToSave.createdAt = new Date();
+          updatedQuestionsArray.push(questionToSave);
+          addedQuestions.push(incomingQuestion.questionId);
+        }
+      }
+
+      updateDoc.questions = updatedQuestionsArray;
     }
 
     // Handle date updates with validation
@@ -272,8 +264,12 @@ async function run(_id, title, description, tags, status, startDate, endDate, qu
 
     // Add questions-specific information if questions were updated
     if (questions !== undefined && questions !== null) {
-      response.questionsCount = questions.length;
-      response.questionIds = questions.map(q => q.questionId);
+      response.totalQuestions = updatedGame.questions ? updatedGame.questions.length : 0;
+      response.addedQuestions = addedQuestions;
+      response.updatedQuestions = updatedQuestions;
+      response.addedCount = addedQuestions.length;
+      response.updatedCount = updatedQuestions.length;
+      response.processedQuestions = questions.length;
     }
     
     return response;

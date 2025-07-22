@@ -67,3 +67,13 @@ application:
             annotations:
               require-adobe-auth: false
               final: true
+          generateGamePin:
+            function: actions/generateGamePin/index.js
+            web: 'yes'
+            runtime: nodejs:22
+            inputs:
+              LOG_LEVEL: debug
+              ATLAS_URI: $ATLAS_URI
+            annotations:
+              require-adobe-auth: false
+              final: true
